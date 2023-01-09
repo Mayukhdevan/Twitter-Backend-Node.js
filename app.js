@@ -111,7 +111,7 @@ app.post("/login/", async (req, res) => {
   }
 });
 
-// Get tweets API: Returns 4 tweets at a time
+// Get Feeds API: Returns 4 tweets at a time
 app.get("/user/tweets/feed/", authenticateToken, async (req, res) => {
   const username = req.username;
 
@@ -182,7 +182,7 @@ app.get("/user/followers/", authenticateToken, async (req, res) => {
   res.send(namesArray);
 });
 
-// Get tweet API: Returns tweet as per tweetId
+// Get Feed API: Returns tweet as per tweetId
 app.get("/tweets/:tweetId/", authenticateToken, async (req, res) => {
   const username = req.username;
   const { tweetId } = req.params;
@@ -282,4 +282,34 @@ app.get("/tweets/:tweetId/replies/", authenticateToken, async (req, res) => {
   } else {
     res.send({ replies: replies });
   }
+});
+
+// Get tweets API: Returns a list of tweets that user has tweeted
+app.get("/user/tweets/", authenticateToken, async (req, res) => {
+  const username = req.username;
+
+  const getTweetsQuery = `
+    SELECT
+        tweet.tweet_id,
+        tweet,
+        COUNT(like_id) AS likes,
+        COUNT(reply_id) AS replies,
+        tweet.date_time AS dateTime
+    FROM
+        user 
+        NATURAL JOIN tweet
+        INNER JOIN like ON tweet.tweet_id = like.tweet_id
+        INNER JOIN reply on tweet.tweet_id = reply.tweet_id
+    WHERE
+        username = "${username}"
+    GROUP BY
+        tweet.tweet_id;`;
+  const tweetsArray = await db.all(getTweetsQuery);
+  console.log(tweetsArray);
+  //   if (replies.length === 0) {
+  //     res.status(401);
+  //     res.send("Invalid Request");
+  //   } else {
+  //     res.send({ replies: replies });
+  //   }
 });
