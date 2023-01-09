@@ -286,16 +286,14 @@ app.get("/tweets/:tweetId/replies/", authenticateToken, async (req, res) => {
 });
 
 // Get tweets API: Returns a list of tweets that user has tweeted
-// ______________________________________________ Buggy one^
 app.get("/user/tweets/", authenticateToken, async (req, res) => {
   const username = req.username;
 
   const getTweetsQuery = `
     SELECT
-        tweet.tweet_id,
         tweet,
-        COUNT(like_id) AS likes,
-        COUNT(reply_id) AS replies,
+        COUNT(DISTINCT like_id) AS likes,
+        COUNT(DISTINCT reply_id) AS replies,
         tweet.date_time AS dateTime
     FROM
         user 
@@ -307,15 +305,8 @@ app.get("/user/tweets/", authenticateToken, async (req, res) => {
     GROUP BY
         tweet.tweet_id;`;
   const tweetsArray = await db.all(getTweetsQuery);
-  console.log(tweetsArray);
-  //   if (replies.length === 0) {
-  //     res.status(401);
-  //     res.send("Invalid Request");
-  //   } else {
-  //     res.send({ replies: replies });
-  //   }
+  res.send(tweetsArray);
 });
-// ______________________________________________ Buggy one^
 
 // Create tweet API: Create a tweet in the tweet table
 app.post("/user/tweets/", authenticateToken, async (req, res) => {
