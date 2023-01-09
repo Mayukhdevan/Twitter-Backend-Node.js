@@ -4,7 +4,6 @@ const { open } = require("sqlite");
 const sqlite3 = require("sqlite3");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
-const format = require("date-fns/format");
 
 const dbPath = path.join(__dirname, "twitterClone.db");
 const app = express();
@@ -36,13 +35,13 @@ const authenticateToken = (req, res, next) => {
   if (jwtToken === undefined) {
     // Token not provided
     res.status(401);
-    res.send("Invalid Access Token");
+    res.send("Invalid JWT Token");
   } else {
     jwt.verify(jwtToken, "MY_SECRET_TOKEN", async (error, payload) => {
       if (error) {
         // Incorrect token
         res.status(401);
-        res.send("Invalid Access Token");
+        res.send("Invalid JWT Token");
       } else {
         req.username = payload.username; // Pass data to the next handler with req obj
         next(); // Call the next handler or middleware
@@ -93,7 +92,7 @@ app.post("/login/", async (req, res) => {
   if (dbUser === undefined) {
     // If user doesn't have a twitter A/C
     res.status(400);
-    res.send("Invalid User");
+    res.send("Invalid user");
   } else {
     // If user has an A/C
     const isPasswordMatched = await bcrypt.compare(password, dbUser.password);
@@ -107,15 +106,14 @@ app.post("/login/", async (req, res) => {
     } else {
       // Incorrect pw
       res.status(400);
-      res.send("Invalid Password");
+      res.send("Invalid password");
     }
   }
 });
 
-// Get Feeds API: Returns 4 tweets at a time
+// Get feeds API: Returns 4 tweets at a time
 app.get("/user/tweets/feed/", authenticateToken, async (req, res) => {
   const username = req.username;
-
   const getTweetsQuery = `
     SELECT
         ALL_TABLE.username AS username,
@@ -126,13 +124,15 @@ app.get("/user/tweets/feed/", authenticateToken, async (req, res) => {
         user ON follower.following_user_id = user.user_id) AS UF
         INNER JOIN tweet ON UF.user_id = tweet.user_id) AS ALL_TABLE
     WHERE
-        ALL_TABLE.follower_user_id = 
-            (SELECT
+       ALL_TABLE.follower_user_id = (
+            SELECT
                 user_id
             FROM
                 user
             WHERE
                 username = "${username}")
+    ORDER BY
+       tweet.date_time DESC
     LIMIT
         4;`;
   const tweetsArray = await db.all(getTweetsQuery);
@@ -144,19 +144,19 @@ app.get("/user/following/", authenticateToken, async (req, res) => {
   const username = req.username;
 
   const getFollowingUsernamesQuery = `
-    SELECT
-        UF.name AS name
-    FROM
-        (follower INNER JOIN
-        user ON follower.following_user_id = user.user_id) AS UF
-    WHERE
-        UF.follower_user_id = 
-        (SELECT
-            user_id
-        FROM
-            user
-        WHERE
-            username = "${username}");`;
+	SELECT
+		UF.name AS name
+	FROM
+		(follower INNER JOIN
+		user ON follower.following_user_id = user.user_id) AS UF
+	WHERE
+		UF.follower_user_id = 
+		(SELECT
+			user_id
+		FROM
+			user
+		WHERE
+			username = "${username}");`;
   const namesArray = await db.all(getFollowingUsernamesQuery);
   res.send(namesArray);
 });
@@ -172,7 +172,7 @@ app.get("/user/followers/", authenticateToken, async (req, res) => {
         (follower INNER JOIN
         user ON follower.follower_user_id = user.user_id) AS UF
     WHERE
-        UF.follower_user_id = 
+        UF.following_user_id = 
         (SELECT
             user_id
         FROM
@@ -183,30 +183,30 @@ app.get("/user/followers/", authenticateToken, async (req, res) => {
   res.send(namesArray);
 });
 
-// Get Feed API: Returns tweet as per tweetId
+// Get tweet API: Returns tweet as per tweetId
 app.get("/tweets/:tweetId/", authenticateToken, async (req, res) => {
   const username = req.username;
   const { tweetId } = req.params;
 
   const getTweetQuery = `
-    SELECT
-        UF.tweet AS tweet,
-        (SELECT COUNT() FROM like WHERE tweet_id = "${tweetId}") AS likes,
-        (SELECT COUNT() FROM reply WHERE tweet_id = "${tweetId}") AS reply,
-        tweet.date_time AS dateTime
-    FROM
-        (follower INNER JOIN
-        tweet ON follower.following_user_id = tweet.user_id) AS UF
-    WHERE
-        UF.follower_user_id = 
-        (SELECT
-            user_id
-        FROM
-            user
-        WHERE
-            username = "${username}")
-        AND
-        UF.tweet_id = "${tweetId}";`;
+	SELECT
+		UF.tweet AS tweet,
+		(SELECT DISTINCT COUNT() FROM like WHERE tweet_id = "${tweetId}") AS likes,
+		(SELECT DISTINCT COUNT() FROM reply WHERE tweet_id = "${tweetId}") AS replies,
+		tweet.date_time AS dateTime
+	FROM
+		(follower INNER JOIN
+		tweet ON follower.following_user_id = tweet.user_id) AS UF
+	WHERE
+		UF.follower_user_id = 
+		(SELECT
+			user_id
+		FROM
+			user
+		WHERE
+			username = "${username}")
+		AND
+		UF.tweet_id = "${tweetId}";`;
   const tweetDetails = await db.get(getTweetQuery);
 
   if (tweetDetails === undefined) {
@@ -242,7 +242,7 @@ app.get("/tweets/:tweetId/likes/", authenticateToken, async (req, res) => {
         UF.tweet_id = "${tweetId}";`;
   const dbResponse = await db.all(getLikeUserQuery);
   let likesObj = { likes: dbResponse.map((item) => item.username) };
-  console.log(likesObj);
+
   if (likesObj.likes.length === 0) {
     res.status(401);
     res.send("Invalid Request");
@@ -312,16 +312,14 @@ app.get("/user/tweets/", authenticateToken, async (req, res) => {
 app.post("/user/tweets/", authenticateToken, async (req, res) => {
   const username = req.username;
   const { tweet } = req.body;
-  const dateTime = format(new Date(), "yyyy-MM-dd HH:mm:ss");
 
   const createTweetQuery = `
     INSERT INTO
-			tweet(tweet, user_id, date_time)
+			tweet(tweet, user_id)
 		VALUES
 			(
 			"${tweet}",
-			(SELECT user_id FROM user WHERE username = "${username}"),
-			"${dateTime}");`;
+			(SELECT user_id FROM user WHERE username = "${username}"));`;
   await db.run(createTweetQuery);
   res.send("Created a Tweet");
 });
