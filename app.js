@@ -116,24 +116,24 @@ app.get("/user/tweets/feed/", authenticateToken, async (req, res) => {
   const username = req.username;
 
   const getTweetsQuery = `
-							SELECT
-								ALL_TABLE.username AS username,
-								ALL_TABLE.tweet AS tweet,
-								ALL_TABLE.date_time AS dateTime
-							FROM
-								((follower INNER JOIN
-								user ON follower.following_user_id = user.user_id) AS UF
-								INNER JOIN tweet ON UF.user_id = tweet.user_id) AS ALL_TABLE
-							WHERE
-								ALL_TABLE.follower_user_id = 
-									(SELECT
-										user_id
-									FROM
-										user
-									WHERE
-										username = "${username}")
-							LIMIT
-							  4;`;
+    SELECT
+        ALL_TABLE.username AS username,
+        ALL_TABLE.tweet AS tweet,
+        ALL_TABLE.date_time AS dateTime
+    FROM
+        ((follower INNER JOIN
+        user ON follower.following_user_id = user.user_id) AS UF
+        INNER JOIN tweet ON UF.user_id = tweet.user_id) AS ALL_TABLE
+    WHERE
+        ALL_TABLE.follower_user_id = 
+            (SELECT
+                user_id
+            FROM
+                user
+            WHERE
+                username = "${username}")
+    LIMIT
+        4;`;
   const tweetsArray = await db.all(getTweetsQuery);
   res.send(tweetsArray);
 });
@@ -143,19 +143,19 @@ app.get("/user/following/", authenticateToken, async (req, res) => {
   const username = req.username;
 
   const getFollowingUsernamesQuery = `
-							SELECT
-								UF.name AS name
-							FROM
-								(follower INNER JOIN
-								user ON follower.following_user_id = user.user_id) AS UF
-							WHERE
-								UF.follower_user_id = 
-								(SELECT
-									user_id
-								FROM
-									user
-								WHERE
-									username = "${username}");`;
+    SELECT
+        UF.name AS name
+    FROM
+        (follower INNER JOIN
+        user ON follower.following_user_id = user.user_id) AS UF
+    WHERE
+        UF.follower_user_id = 
+        (SELECT
+            user_id
+        FROM
+            user
+        WHERE
+            username = "${username}");`;
   const namesArray = await db.all(getFollowingUsernamesQuery);
   res.send(namesArray);
 });
@@ -165,19 +165,19 @@ app.get("/user/followers/", authenticateToken, async (req, res) => {
   const username = req.username;
 
   const getFollowersUsernamesQuery = `
-							SELECT
-								UF.name AS name
-							FROM
-								(follower INNER JOIN
-								user ON follower.follower_user_id = user.user_id) AS UF
-							WHERE
-								UF.follower_user_id = 
-								(SELECT
-									user_id
-								FROM
-									user
-								WHERE
-									username = "${username}");`;
+    SELECT
+        UF.name AS name
+    FROM
+        (follower INNER JOIN
+        user ON follower.follower_user_id = user.user_id) AS UF
+    WHERE
+        UF.follower_user_id = 
+        (SELECT
+            user_id
+        FROM
+            user
+        WHERE
+            username = "${username}");`;
   const namesArray = await db.all(getFollowersUsernamesQuery);
   res.send(namesArray);
 });
@@ -188,24 +188,24 @@ app.get("/tweets/:tweetId/", authenticateToken, async (req, res) => {
   const { tweetId } = req.params;
 
   const getTweetQuery = `
-							SELECT
-								UF.tweet AS tweet,
-								(SELECT COUNT() FROM like WHERE tweet_id = "${tweetId}") AS likes,
-								(SELECT COUNT() FROM reply WHERE tweet_id = "${tweetId}") AS reply,
-								tweet.date_time AS dateTime
-							FROM
-								(follower INNER JOIN
-								tweet ON follower.following_user_id = tweet.user_id) AS UF
-							WHERE
-								UF.follower_user_id = 
-								(SELECT
-									user_id
-								FROM
-									user
-								WHERE
-									username = "${username}")
-								AND
-								UF.tweet_id = "${tweetId}";`;
+    SELECT
+        UF.tweet AS tweet,
+        (SELECT COUNT() FROM like WHERE tweet_id = "${tweetId}") AS likes,
+        (SELECT COUNT() FROM reply WHERE tweet_id = "${tweetId}") AS reply,
+        tweet.date_time AS dateTime
+    FROM
+        (follower INNER JOIN
+        tweet ON follower.following_user_id = tweet.user_id) AS UF
+    WHERE
+        UF.follower_user_id = 
+        (SELECT
+            user_id
+        FROM
+            user
+        WHERE
+            username = "${username}")
+        AND
+        UF.tweet_id = "${tweetId}";`;
   const tweetDetails = await db.get(getTweetQuery);
 
   if (tweetDetails === undefined) {
@@ -213,5 +213,73 @@ app.get("/tweets/:tweetId/", authenticateToken, async (req, res) => {
     res.send("Invalid Request");
   } else {
     res.send(tweetDetails);
+  }
+});
+
+// Get like user API: Returns a list of users who likes the tweet
+app.get("/tweets/:tweetId/likes/", authenticateToken, async (req, res) => {
+  const username = req.username;
+  const { tweetId } = req.params;
+
+  const getLikeUserQuery = `
+    SELECT
+        user.username AS username
+    FROM
+        (follower INNER JOIN
+        tweet ON follower.following_user_id = tweet.user_id) AS UF
+        INNER JOIN like ON UF.tweet_id = like.tweet_id
+        INNER JOIN user ON like.user_id = user.user_id
+    WHERE
+        UF.follower_user_id = 
+        (SELECT
+            user_id
+        FROM
+            user
+        WHERE
+            username = "${username}")
+        AND
+        UF.tweet_id = "${tweetId}";`;
+  const dbResponse = await db.all(getLikeUserQuery);
+  let likesObj = { likes: dbResponse.map((item) => item.username) };
+  console.log(likesObj);
+  if (likesObj.likes.length === 0) {
+    res.status(401);
+    res.send("Invalid Request");
+  } else {
+    res.send(likesObj);
+  }
+});
+
+// Get replies API: Returns a list of users replied to the tweet
+app.get("/tweets/:tweetId/replies/", authenticateToken, async (req, res) => {
+  const username = req.username;
+  const { tweetId } = req.params;
+
+  const getRepliesQuery = `
+    SELECT
+        user.name AS name,
+        reply.reply AS reply
+    FROM
+        (follower INNER JOIN
+        tweet ON follower.following_user_id = tweet.user_id) AS UF
+        INNER JOIN reply ON UF.tweet_id = reply.tweet_id
+        INNER JOIN user ON reply.user_id = user.user_id
+    WHERE
+        UF.follower_user_id = 
+        (SELECT
+            user_id
+        FROM
+            user
+        WHERE
+            username = "${username}")
+        AND
+        UF.tweet_id = "${tweetId}";`;
+  const replies = await db.all(getRepliesQuery);
+
+  if (replies.length === 0) {
+    res.status(401);
+    res.send("Invalid Request");
+  } else {
+    res.send({ replies: replies });
   }
 });
