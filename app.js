@@ -330,15 +330,21 @@ app.post("/user/tweets/", authenticateToken, async (req, res) => {
 app.delete("/tweets/:tweetId/", authenticateToken, async (req, res) => {
   const username = req.username;
   const { tweetId } = req.params;
+
   const deleteTweetQuery = `
 		DELETE FROM
 			tweet
 		WHERE
-			tweet_id = "${tweetId};
-			--OR
-			--user_id = (SELECT user_id FROM user WHERE username = "${username}");`;
+			tweet_id = ${tweetId}
+			AND
+			user_id = (SELECT user_id FROM user WHERE username = "${username}");`;
   const deleteTweet = await db.run(deleteTweetQuery);
-  console.log(deleteTweet);
+  if (deleteTweet.changes === 0) {
+    res.status(401);
+    res.send("Invalid Request");
+  } else {
+    res.send("Tweet Removed");
+  }
 });
 
 module.exports = app;
