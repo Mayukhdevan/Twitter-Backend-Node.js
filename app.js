@@ -4,6 +4,7 @@ const { open } = require("sqlite");
 const sqlite3 = require("sqlite3");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
+const format = require("date-fns/format");
 
 const dbPath = path.join(__dirname, "twitterClone.db");
 const app = express();
@@ -285,6 +286,7 @@ app.get("/tweets/:tweetId/replies/", authenticateToken, async (req, res) => {
 });
 
 // Get tweets API: Returns a list of tweets that user has tweeted
+// ______________________________________________ Buggy one^
 app.get("/user/tweets/", authenticateToken, async (req, res) => {
   const username = req.username;
 
@@ -313,3 +315,39 @@ app.get("/user/tweets/", authenticateToken, async (req, res) => {
   //     res.send({ replies: replies });
   //   }
 });
+// ______________________________________________ Buggy one^
+
+// Create tweet API: Create a tweet in the tweet table
+app.post("/user/tweets/", authenticateToken, async (req, res) => {
+  const username = req.username;
+  const { tweet } = req.body;
+  const dateTime = format(new Date(), "yyyy-MM-dd HH:mm:ss");
+
+  const createTweetQuery = `
+    INSERT INTO
+			tweet(tweet, user_id, date_time)
+		VALUES
+			(
+			"${tweet}",
+			(SELECT user_id FROM user WHERE username = "${username}"),
+			"${dateTime}");`;
+  await db.run(createTweetQuery);
+  res.send("Created a Tweet");
+});
+
+// Delete tweet API: Delete a tweet as per the id
+app.delete("/tweets/:tweetId/", authenticateToken, async (req, res) => {
+  const username = req.username;
+  const { tweetId } = req.params;
+  const deleteTweetQuery = `
+		DELETE FROM
+			tweet
+		WHERE
+			tweet_id = "${tweetId};
+			--OR
+			--user_id = (SELECT user_id FROM user WHERE username = "${username}");`;
+  const deleteTweet = await db.run(deleteTweetQuery);
+  console.log(deleteTweet);
+});
+
+module.exports = app;
